@@ -1,0 +1,31 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    project: pulsede
+    env: production
+
+scrape_configs:
+  - job_name: pulsede-api
+    static_configs:
+      - targets: ["pulsede-api:8000"]
+    metrics_path: /metrics
+
+  - job_name: pulsede-consumer
+    static_configs:
+      - targets: ["pulsede-consumer:8001"]
+    metrics_path: /metrics
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Uncomment when postgres_exporter sidecar is added:
+  # - job_name: timescaledb
+  #   static_configs:
+  #     - targets: ["timescaledb:9187"]
+
+  # Uncomment when redis_exporter sidecar is added:
+  # - job_name: redis
+  #   static_configs:
+  #     - targets: ["redis:9121"]
