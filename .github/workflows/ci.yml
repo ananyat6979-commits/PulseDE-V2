@@ -1,0 +1,205 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+
+  # ── 1. Lint and type check ────────────────────────────────────────────────────
+  lint-and-type-check:
+    name: Lint & type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dev dependencies
+        run: pip install -e ".[dev]" --no-build-isolation
+
+      - name: Ruff lint
+        run: ruff check src/ tests/ config/
+
+      - name: Ruff format check
+        run: ruff format --check src/ tests/ config/
+
+      - name: MyPy type check
+        run: mypy src/ config/ --ignore-missing-imports
+
+  # ── 2. Unit + integration tests ───────────────────────────────────────────────
+  test:
+    name: Test suite
+    runs-on: ubuntu-latest
+    needs: lint-and-type-check
+
+    services:
+      redis:
+        image: redis:7.2-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      timescaledb:
+        image: timescale/timescaledb:latest-pg16
+        ports: ["5432:5432"]
+        env:
+          POSTGRES_DB: pulsede_test
+          POSTGRES_USER: pulsede
+          POSTGRES_PASSWORD: pulsede
+        options: >-
+          --health-cmd "pg_isready -U pulsede"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]" --no-build-isolation
+
+      - name: Cache HuggingFace models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-models-finbert-ner-v2
+          restore-keys: |
+            hf-models-finbert-ner-
+
+      - name: Run tests with coverage
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: pulsede_test
+          DB_USER: pulsede
+          DB_PASSWORD: pulsede
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          NEWS_API_KEY: test-key-ci
+          KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+          MLFLOW_TRACKING_URI: http://localhost:5000
+          API_SECRET_KEY: ci-test-secret
+        run: |
+          pytest tests/unit/ \
+            --cov=src \
+            --cov=config \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=80 \
+            -v \
+            --tb=short \
+            -p no:warnings
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage.xml
+          fail_ci_if_error: false
+        continue-on-error: true
+
+  # ── 3. Security scan ──────────────────────────────────────────────────────────
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    needs: lint-and-type-check
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install scanners
+        run: pip install bandit safety
+
+      - name: Bandit static security analysis
+        run: bandit -r src/ config/ -ll -ii --skip B101,B311
+
+      - name: Safety dependency vulnerability check
+        run: safety check --full-report
+        continue-on-error: true   # Don't block on transitive dep CVEs
+
+  # ── 4. Docker build & push (main branch only) ─────────────────────────────────
+  docker-build:
+    name: "Docker: ${{ matrix.target }}"
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [api, consumer, dashboard]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.target }}
+          tags: |
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push ${{ matrix.target }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,scope=${{ matrix.target }},mode=max
+          build-args: BUILDKIT_INLINE_CACHE=1
+
+  # ── 5. Deploy to staging ──────────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy → staging
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.ref == 'refs/heads/main'
+    environment: staging
+    steps:
+      - name: Deploy
+        run: |
+          echo "Deploying SHA ${{ github.sha }} to staging"
+          # Production: replace with kubectl / docker-compose / ansible command
+          # kubectl set image deployment/pulsede-api \
+          #   api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-api:main-${{ github.sha }}
