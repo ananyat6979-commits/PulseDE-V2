@@ -10,18 +10,24 @@ WS   /ws/realtime                   live stream via Redis pub/sub
 Auth:       Bearer JWT (HS256)
 Rate limit: Redis sliding window (60 req/min per user)
 """
+
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 import uvicorn
 from fastapi import (
-    Depends, FastAPI, HTTPException, Query, Request,
-    WebSocket, WebSocketDisconnect, status,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from jose import JWTError, jwt
@@ -63,20 +69,23 @@ async def _startup() -> None:
 
 
 def get_db() -> TimescaleWriter:
-    assert _db is not None; return _db
+    assert _db is not None
+    return _db
+
 
 def get_cache() -> RedisCache:
-    assert _cache is not None; return _cache
+    assert _cache is not None
+    return _cache
+
 
 def get_ensemble() -> SentimentEnsemble:
-    assert _ensemble is not None; return _ensemble
+    assert _ensemble is not None
+    return _ensemble
 
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
 def create_access_token(subject: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.api.access_token_expire_minutes
-    )
+    expire = datetime.now(UTC) + timedelta(minutes=settings.api.access_token_expire_minutes)
     return jwt.encode(
         {"sub": subject, "exp": expire},
         settings.api.secret_key.get_secret_value(),
@@ -105,8 +114,10 @@ async def check_rate_limit(
     client_id: str = Depends(get_current_user),
 ) -> None:
     if cache.is_rate_limited(client_id, limit=settings.api.rate_limit_per_minute):
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                            detail="Rate limit exceeded — max 60 req/min")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded — max 60 req/min",
+        )
 
 
 AuthDep = Annotated[str, Depends(get_current_user)]
@@ -143,7 +154,9 @@ async def health(
         cache_ok = False
     return HealthResponse(
         status="ok" if db_ok and cache_ok else "degraded",
-        db_ok=db_ok, cache_ok=cache_ok, model_loaded=_ensemble is not None,
+        db_ok=db_ok,
+        cache_ok=cache_ok,
+        model_loaded=_ensemble is not None,
     )
 
 
@@ -176,8 +189,11 @@ async def get_ticker(
     pos = sum(1 for r in rows if r["ensemble_sentiment"] == "positive")
     neg = sum(1 for r in rows if r["ensemble_sentiment"] == "negative")
     return {
-        "ticker": ticker.upper(), "hours": hours, "article_count": n,
-        "positive_pct": round(pos / n, 4), "negative_pct": round(neg / n, 4),
+        "ticker": ticker.upper(),
+        "hours": hours,
+        "article_count": n,
+        "positive_pct": round(pos / n, 4),
+        "negative_pct": round(neg / n, 4),
         "neutral_pct": round((n - pos - neg) / n, 4),
         "avg_confidence": round(sum(r["ensemble_confidence"] for r in rows) / n, 4),
         "source": "db",

@@ -10,11 +10,12 @@ Outputs:
   Structured log (always)
   MLflow run tag on drift alert (via orchestration/pipeline.py)
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 from prometheus_client import Gauge
@@ -44,15 +45,16 @@ class DriftDetector:
         self._ref_confidence: np.ndarray | None = None
         self._ref_label_dist: np.ndarray | None = None
 
-    def set_reference(
-        self, confidence_scores: list[float], sentiment_labels: list[str]
-    ) -> None:
+    def set_reference(self, confidence_scores: list[float], sentiment_labels: list[str]) -> None:
         self._ref_confidence = np.array(confidence_scores, dtype=np.float32)
-        counts = np.array([
-            sum(1 for s in sentiment_labels if s == "positive"),
-            sum(1 for s in sentiment_labels if s == "negative"),
-            sum(1 for s in sentiment_labels if s == "neutral"),
-        ], dtype=np.float32)
+        counts = np.array(
+            [
+                sum(1 for s in sentiment_labels if s == "positive"),
+                sum(1 for s in sentiment_labels if s == "negative"),
+                sum(1 for s in sentiment_labels if s == "neutral"),
+            ],
+            dtype=np.float32,
+        )
         self._ref_label_dist = counts / counts.sum()
         logger.info("drift_reference_set n=%d", len(confidence_scores))
 
@@ -74,15 +76,16 @@ class DriftDetector:
             alerts.append(f"PSI={psi:.4f} > {settings.monitoring.psi_threshold}")
             logger.warning("drift_psi_alert psi=%.4f", psi)
 
-        cur_counts = np.array([
-            sum(1 for s in current_sentiments if s == "positive"),
-            sum(1 for s in current_sentiments if s == "negative"),
-            sum(1 for s in current_sentiments if s == "neutral"),
-        ], dtype=np.float32)
-        ref_expected = self._ref_label_dist * cur_counts.sum()
-        _, pvalue, _, _ = chi2_contingency(
-            np.vstack([cur_counts, ref_expected]).clip(min=1)
+        cur_counts = np.array(
+            [
+                sum(1 for s in current_sentiments if s == "positive"),
+                sum(1 for s in current_sentiments if s == "negative"),
+                sum(1 for s in current_sentiments if s == "neutral"),
+            ],
+            dtype=np.float32,
         )
+        ref_expected = self._ref_label_dist * cur_counts.sum()
+        _, pvalue, _, _ = chi2_contingency(np.vstack([cur_counts, ref_expected]).clip(min=1))
         CHI2_PVALUE_GAUGE.set(float(pvalue))
         if pvalue < 0.01:
             alerts.append(f"Label drift chi2 p={pvalue:.4f}")
@@ -97,7 +100,7 @@ class DriftDetector:
             logger.warning("drift_prediction_alert js=%.4f", js)
 
         return DriftReport(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             psi_confidence=round(float(psi), 6),
             js_divergence=round(float(js), 6),
             chi2_pvalue=round(float(pvalue), 6),

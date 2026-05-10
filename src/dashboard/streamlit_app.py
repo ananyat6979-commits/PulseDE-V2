@@ -9,6 +9,7 @@ Features:
   Sidebar: time window, confidence filter, sentiment filter, impact filter, ticker lookup
   30-second auto-refresh
 """
+
 from __future__ import annotations
 
 import ast
@@ -16,7 +17,7 @@ import json
 import threading
 import time
 from collections import deque
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pandas as pd
@@ -25,14 +26,14 @@ import requests
 import streamlit as st
 
 API_BASE = "http://localhost:8080/v1"
-WS_URL   = "ws://localhost:8080/ws/realtime"
+WS_URL = "ws://localhost:8080/ws/realtime"
 API_TOKEN = "dev-token"
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}"}
 
 SENTIMENT_COLOURS = {
     "positive": "#22c55e",
     "negative": "#ef4444",
-    "neutral":  "#6b7280",
+    "neutral": "#6b7280",
 }
 
 st.set_page_config(
@@ -83,8 +84,9 @@ if not st.session_state.ws_started:
 @st.cache_data(ttl=30)
 def load_recent(n: int = 300) -> pd.DataFrame:
     try:
-        r = requests.get(f"{API_BASE}/sentiment/latest",
-                         params={"n": n}, headers=HEADERS, timeout=5)
+        r = requests.get(
+            f"{API_BASE}/sentiment/latest", params={"n": n}, headers=HEADERS, timeout=5
+        )
         r.raise_for_status()
         return pd.DataFrame(r.json())
     except Exception:
@@ -94,8 +96,9 @@ def load_recent(n: int = 300) -> pd.DataFrame:
 @st.cache_data(ttl=300)
 def load_hourly(hours: int = 48) -> pd.DataFrame:
     try:
-        r = requests.get(f"{API_BASE}/sentiment/hourly",
-                         params={"hours": hours}, headers=HEADERS, timeout=5)
+        r = requests.get(
+            f"{API_BASE}/sentiment/hourly", params={"hours": hours}, headers=HEADERS, timeout=5
+        )
         r.raise_for_status()
         return pd.DataFrame(r.json())
     except Exception:
@@ -113,15 +116,17 @@ with st.sidebar:
 
     min_confidence = st.slider("Min confidence", 0.0, 1.0, 0.5, 0.05)
     sentiment_filter = st.multiselect(
-        "Sentiment", ["positive", "negative", "neutral"],
+        "Sentiment",
+        ["positive", "negative", "neutral"],
         default=["positive", "negative", "neutral"],
     )
     impact_filter = st.multiselect(
-        "Market impact", ["high", "medium", "low", "unknown"],
+        "Market impact",
+        ["high", "medium", "low", "unknown"],
         default=["high", "medium", "low", "unknown"],
     )
     show_uncertain = st.toggle("Show uncertain predictions", value=True)
-    auto_refresh   = st.toggle("Auto-refresh (30s)", value=True)
+    auto_refresh = st.toggle("Auto-refresh (30s)", value=True)
 
     st.divider()
     ticker_query = st.text_input("Ticker lookup", placeholder="AAPL")
@@ -129,13 +134,14 @@ with st.sidebar:
         try:
             r = requests.get(
                 f"{API_BASE}/sentiment/ticker/{ticker_query.upper()}",
-                headers=HEADERS, timeout=5,
+                headers=HEADERS,
+                timeout=5,
             )
             if r.ok:
                 t = r.json()
                 c1, c2 = st.columns(2)
-                c1.metric("Positive", f"{t['positive_pct']*100:.1f}%")
-                c2.metric("Negative", f"{t['negative_pct']*100:.1f}%")
+                c1.metric("Positive", f"{t['positive_pct'] * 100:.1f}%")
+                c2.metric("Negative", f"{t['negative_pct'] * 100:.1f}%")
                 st.metric("Articles", t["article_count"])
         except Exception:
             st.warning("Ticker not found or API offline")
@@ -160,7 +166,7 @@ except Exception:
 st.caption(badge)
 
 # ── Load + filter ──────────────────────────────────────────────────────────────
-df_raw    = load_recent(n=500)
+df_raw = load_recent(n=500)
 df_hourly = load_hourly(hours=hours)
 
 if df_raw.empty:
@@ -171,7 +177,7 @@ df = df_raw.copy()
 df["published_at"] = pd.to_datetime(df["published_at"], utc=True)
 df["ensemble_confidence"] = df["ensemble_confidence"].astype(float)
 
-cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+cutoff = datetime.now(UTC) - timedelta(hours=hours)
 df = df[df["published_at"] >= cutoff]
 df = df[df["ensemble_confidence"] >= min_confidence]
 df = df[df["ensemble_sentiment"].isin(sentiment_filter)]
@@ -182,16 +188,18 @@ if not show_uncertain and "is_uncertain" in df.columns:
 
 # ── KPI cards ──────────────────────────────────────────────────────────────────
 n = len(df)
-pos_pct  = (df["ensemble_sentiment"] == "positive").mean() * 100 if n else 0.0
-neg_pct  = (df["ensemble_sentiment"] == "negative").mean() * 100 if n else 0.0
+pos_pct = (df["ensemble_sentiment"] == "positive").mean() * 100 if n else 0.0
+neg_pct = (df["ensemble_sentiment"] == "negative").mean() * 100 if n else 0.0
 avg_conf = df["ensemble_confidence"].mean() * 100 if n else 0.0
-avg_unc  = df["ensemble_uncertainty"].mean() * 100 if n and "ensemble_uncertainty" in df.columns else 0.0
+avg_unc = (
+    df["ensemble_uncertainty"].mean() * 100 if n and "ensemble_uncertainty" in df.columns else 0.0
+)
 
 col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("Articles",        f"{n:,}")
-col2.metric("Positive",        f"{pos_pct:.1f}%",  delta=f"{pos_pct-50:.1f}pp")
-col3.metric("Negative",        f"{neg_pct:.1f}%")
-col4.metric("Avg confidence",  f"{avg_conf:.1f}%")
+col1.metric("Articles", f"{n:,}")
+col2.metric("Positive", f"{pos_pct:.1f}%", delta=f"{pos_pct - 50:.1f}pp")
+col3.metric("Negative", f"{neg_pct:.1f}%")
+col4.metric("Avg confidence", f"{avg_conf:.1f}%")
 col5.metric("Avg uncertainty", f"{avg_unc:.2f}%")
 
 st.divider()
@@ -206,8 +214,13 @@ with r1c1:
         dh["bucket"] = pd.to_datetime(dh["bucket"])
         pivot = dh.groupby(["bucket", "ensemble_sentiment"])["article_count"].sum().reset_index()
         fig = px.bar(
-            pivot, x="bucket", y="article_count", color="ensemble_sentiment",
-            color_discrete_map=SENTIMENT_COLOURS, barmode="stack", template="plotly_white",
+            pivot,
+            x="bucket",
+            y="article_count",
+            color="ensemble_sentiment",
+            color_discrete_map=SENTIMENT_COLOURS,
+            barmode="stack",
+            template="plotly_white",
             labels={"article_count": "Articles", "bucket": "", "ensemble_sentiment": "Sentiment"},
         )
         fig.update_layout(height=320, margin=dict(l=0, r=0, t=10, b=0))
@@ -221,9 +234,13 @@ with r1c2:
         counts = df["ensemble_sentiment"].value_counts().reset_index()
         counts.columns = ["sentiment", "count"]
         fig = px.pie(
-            counts, values="count", names="sentiment",
-            color="sentiment", color_discrete_map=SENTIMENT_COLOURS,
-            hole=0.55, template="plotly_white",
+            counts,
+            values="count",
+            names="sentiment",
+            color="sentiment",
+            color_discrete_map=SENTIMENT_COLOURS,
+            hole=0.55,
+            template="plotly_white",
         )
         fig.update_layout(height=320, margin=dict(l=0, r=0, t=10, b=0))
         st.plotly_chart(fig, use_container_width=True)
@@ -234,9 +251,14 @@ r2c1, r2c2 = st.columns(2)
 with r2c1:
     st.subheader("Confidence by sentiment")
     fig = px.violin(
-        df, y="ensemble_confidence", x="ensemble_sentiment",
-        color="ensemble_sentiment", color_discrete_map=SENTIMENT_COLOURS,
-        box=True, points="outliers", template="plotly_white",
+        df,
+        y="ensemble_confidence",
+        x="ensemble_sentiment",
+        color="ensemble_sentiment",
+        color_discrete_map=SENTIMENT_COLOURS,
+        box=True,
+        points="outliers",
+        template="plotly_white",
         labels={"ensemble_confidence": "Confidence", "ensemble_sentiment": "Sentiment"},
     )
     fig.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0), showlegend=False)
@@ -247,9 +269,13 @@ with r2c2:
     if "ensemble_uncertainty" in df.columns:
         sample = df.sample(min(len(df), 300))
         fig = px.scatter(
-            sample, x="ensemble_confidence", y="ensemble_uncertainty",
-            color="ensemble_sentiment", color_discrete_map=SENTIMENT_COLOURS,
-            opacity=0.7, template="plotly_white",
+            sample,
+            x="ensemble_confidence",
+            y="ensemble_uncertainty",
+            color="ensemble_sentiment",
+            color_discrete_map=SENTIMENT_COLOURS,
+            opacity=0.7,
+            template="plotly_white",
             hover_data=["headline", "source"] if "headline" in df.columns else None,
             labels={
                 "ensemble_confidence": "Confidence",
@@ -276,7 +302,9 @@ if "tickers" in df.columns and n:
         top = pivot.sum(axis=1).nlargest(20).index
         pivot = pivot.loc[top]
         fig = px.imshow(
-            pivot, color_continuous_scale="RdYlGn", aspect="auto",
+            pivot,
+            color_continuous_scale="RdYlGn",
+            aspect="auto",
             labels=dict(x="Sentiment", y="Ticker", color="Count"),
             template="plotly_white",
         )
@@ -292,11 +320,21 @@ live = list(st.session_state.live_queue)
 display_df = pd.DataFrame(live if live else df.head(50).to_dict("records"))
 
 if not display_df.empty and "ensemble_sentiment" in display_df.columns:
-    show_cols = [c for c in [
-        "published_at", "headline", "source", "ensemble_sentiment",
-        "ensemble_confidence", "ensemble_uncertainty", "market_impact",
-        "tickers", "is_uncertain",
-    ] if c in display_df.columns]
+    show_cols = [
+        c
+        for c in [
+            "published_at",
+            "headline",
+            "source",
+            "ensemble_sentiment",
+            "ensemble_confidence",
+            "ensemble_uncertainty",
+            "market_impact",
+            "tickers",
+            "is_uncertain",
+        ]
+        if c in display_df.columns
+    ]
 
     def _colour(row: pd.Series) -> list[str]:
         col = SENTIMENT_COLOURS.get(str(row.get("ensemble_sentiment", "")), "")
@@ -304,12 +342,16 @@ if not display_df.empty and "ensemble_sentiment" in display_df.columns:
         return [bg] * len(row)
 
     styled = (
-        display_df[show_cols].head(100)
+        display_df[show_cols]
+        .head(100)
         .style.apply(_colour, axis=1)
-        .format({
-            "ensemble_confidence": "{:.1%}",
-            "ensemble_uncertainty": "{:.3f}",
-        }, na_rep="-")
+        .format(
+            {
+                "ensemble_confidence": "{:.1%}",
+                "ensemble_uncertainty": "{:.3f}",
+            },
+            na_rep="-",
+        )
     )
     st.dataframe(styled, use_container_width=True, height=420)
 

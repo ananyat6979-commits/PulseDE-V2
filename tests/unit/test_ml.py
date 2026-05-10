@@ -10,17 +10,16 @@ Covers:
 All tests run without Kafka / TimescaleDB / Redis.
 HuggingFace NER + ZSC pipelines are mocked so CI doesn't download models.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
-from unittest.mock import MagicMock, patch
+from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
 from src.ingestion.schema import (
-    EntityMention,
     MarketImpact,
     ModelPrediction,
     RawArticle,
@@ -28,7 +27,6 @@ from src.ingestion.schema import (
     SentimentResult,
 )
 from src.ml.evaluator import (
-    EvaluationReport,
     _ece,
     _flatten,
     _pairwise_disagreement,
@@ -36,10 +34,10 @@ from src.ml.evaluator import (
 )
 from src.ml.feature_engineering import FinancialFeatureExtractor
 
-
 # ────────────────────────────────────────────────────────────────────────────────
 # Fixtures
 # ────────────────────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def extractor() -> FinancialFeatureExtractor:
@@ -48,10 +46,12 @@ def extractor() -> FinancialFeatureExtractor:
     # Mock NER to return empty list — avoids downloading 400 MB model in CI
     fx._ner = MagicMock(return_value=[])
     # Mock ZSC to return 'low market impact' by default
-    fx._zsc = MagicMock(return_value={
-        "labels": ["low market impact", "medium market impact", "high market impact"],
-        "scores": [0.6, 0.3, 0.1],
-    })
+    fx._zsc = MagicMock(
+        return_value={
+            "labels": ["low market impact", "medium market impact", "high market impact"],
+            "scores": [0.6, 0.3, 0.1],
+        }
+    )
     return fx
 
 
@@ -80,11 +80,10 @@ def _make_eval_data(
 # FinancialFeatureExtractor tests
 # ────────────────────────────────────────────────────────────────────────────────
 
+
 class TestHedgeScore:
     def test_high_hedge(self, extractor: FinancialFeatureExtractor) -> None:
-        fv = extractor.extract(
-            "The market may possibly recover if conditions potentially improve"
-        )
+        fv = extractor.extract("The market may possibly recover if conditions potentially improve")
         assert fv.hedge_score > 0.2
 
     def test_low_hedge_factual(self, extractor: FinancialFeatureExtractor) -> None:
@@ -235,6 +234,7 @@ class TestBatchExtraction:
 # Evaluator tests
 # ────────────────────────────────────────────────────────────────────────────────
 
+
 class TestECE:
     def test_ece_in_range(self) -> None:
         y_true, y_pred, y_proba, *_ = _make_eval_data()
@@ -253,7 +253,7 @@ class TestECE:
         """100% confidence always wrong → ECE should be high (≈ 1.0)."""
         n = 200
         y_proba = np.zeros((n, 3), dtype=np.float32)
-        y_proba[:, 0] = 1.0           # predicts positive
+        y_proba[:, 0] = 1.0  # predicts positive
         y_true = np.ones(n, dtype=int)  # always negative
         ece = _ece(y_true, y_proba)
         assert ece > 0.5
@@ -280,7 +280,7 @@ class TestDisagreementRate:
         n = 100
         a = np.zeros(n, dtype=int)
         b = np.zeros(n, dtype=int)
-        b[: n // 2] = 1          # half disagree
+        b[: n // 2] = 1  # half disagree
         rate = _pairwise_disagreement([a, b])
         assert 0.4 < rate < 0.6
 
@@ -316,10 +316,10 @@ class TestEvaluationReport:
         report = evaluate(*args)
         for cls, m in report.per_class.items():
             assert 0.0 <= m.precision <= 1.0, f"{cls} precision out of range"
-            assert 0.0 <= m.recall <= 1.0,    f"{cls} recall out of range"
-            assert 0.0 <= m.f1 <= 1.0,        f"{cls} f1 out of range"
-            assert 0.0 <= m.pr_auc <= 1.0,    f"{cls} pr_auc out of range"
-            assert 0.0 <= m.roc_auc <= 1.0,   f"{cls} roc_auc out of range"
+            assert 0.0 <= m.recall <= 1.0, f"{cls} recall out of range"
+            assert 0.0 <= m.f1 <= 1.0, f"{cls} f1 out of range"
+            assert 0.0 <= m.pr_auc <= 1.0, f"{cls} pr_auc out of range"
+            assert 0.0 <= m.roc_auc <= 1.0, f"{cls} roc_auc out of range"
 
     def test_confusion_matrix_shape(self) -> None:
         args = _make_eval_data()
@@ -338,9 +338,14 @@ class TestEvaluationReport:
         report = evaluate(*args)
         flat = _flatten(report)
         required = [
-            "eval/macro_f1", "eval/ece", "eval/brier_score",
-            "eval/mcc", "eval/cohen_kappa", "eval/p95_ms",
-            "eval/positive/pr_auc", "eval/negative/roc_auc",
+            "eval/macro_f1",
+            "eval/ece",
+            "eval/brier_score",
+            "eval/mcc",
+            "eval/cohen_kappa",
+            "eval/p95_ms",
+            "eval/positive/pr_auc",
+            "eval/negative/roc_auc",
         ]
         for key in required:
             assert key in flat, f"Missing key: {key}"
@@ -361,9 +366,10 @@ class TestEvaluationReport:
 # RawArticle tests
 # ────────────────────────────────────────────────────────────────────────────────
 
+
 class TestRawArticle:
     def _article(self, headline: str, url: str = "http://x.com") -> RawArticle:
-        return RawArticle("src", headline, url, datetime.now(timezone.utc))
+        return RawArticle("src", headline, url, datetime.now(UTC))
 
     def test_same_inputs_same_hash(self) -> None:
         a = self._article("headline", "http://a.com")
@@ -387,7 +393,15 @@ class TestRawArticle:
     def test_to_dict_keys(self) -> None:
         a = self._article("test")
         d = a.to_dict()
-        expected_keys = {"source", "headline", "url", "published_at", "body", "author", "content_hash"}
+        expected_keys = {
+            "source",
+            "headline",
+            "url",
+            "published_at",
+            "body",
+            "author",
+            "content_hash",
+        }
         assert expected_keys == set(d.keys())
 
     def test_to_dict_published_at_is_iso_string(self) -> None:
@@ -401,9 +415,10 @@ class TestRawArticle:
 # SentimentResult tests
 # ────────────────────────────────────────────────────────────────────────────────
 
+
 class TestSentimentResult:
     def _make_result(self) -> SentimentResult:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return SentimentResult(
             article_hash="abc123",
             headline="Test headline",
@@ -432,6 +447,7 @@ class TestSentimentResult:
 
     def test_to_dict_serialisable(self) -> None:
         import json
+
         r = self._make_result()
         d = r.to_dict()
         # Should be JSON serialisable

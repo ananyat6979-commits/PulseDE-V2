@@ -11,6 +11,7 @@ Why Prefect over schedule:
   - Concurrency limits: prevent overlapping fetch runs
   - UI at localhost:4200 for monitoring without building anything
 """
+
 from __future__ import annotations
 
 import logging
@@ -78,10 +79,9 @@ def check_drift_task(lookback_hours: int = 1, reference_hours: int = 24) -> dict
         log.info("Insufficient current data — skipping")
         return {}
 
-    cur_proba = np.array([
-        [r["positive_prob"], r["negative_prob"], r["neutral_prob"]]
-        for r in current
-    ])
+    cur_proba = np.array(
+        [[r["positive_prob"], r["negative_prob"], r["neutral_prob"]] for r in current]
+    )
     report = detector.check(
         [r["ensemble_confidence"] for r in current],
         [r["ensemble_sentiment"] for r in current],
@@ -94,11 +94,13 @@ def check_drift_task(lookback_hours: int = 1, reference_hours: int = 24) -> dict
             run_name="drift_check",
             experiment_id=exp.experiment_id if exp else None,
         ):
-            mlflow.log_metrics({
-                "drift/psi": report.psi_confidence,
-                "drift/js": report.js_divergence,
-                "drift/chi2_pvalue": report.chi2_pvalue,
-            })
+            mlflow.log_metrics(
+                {
+                    "drift/psi": report.psi_confidence,
+                    "drift/js": report.js_divergence,
+                    "drift/chi2_pvalue": report.chi2_pvalue,
+                }
+            )
             if report.is_drifting:
                 mlflow.set_tag("drift_alert", "; ".join(report.alerts))
     except Exception as exc:

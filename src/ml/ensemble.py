@@ -10,6 +10,7 @@ Calibration: Temperature scaling (Guo et al., ICML 2017)
 Ensemble:    Deep ensembles reduce variance by ~25% vs single model
              (Lakshminarayanan et al., NeurIPS 2017)
 """
+
 from __future__ import annotations
 
 import logging
@@ -64,8 +65,11 @@ class _MCDropoutModel:
         self.model.train() if enable_dropout else self.model.eval()
 
         inputs = self.tokenizer(
-            texts, padding=True, truncation=True,
-            max_length=settings.ml.max_length, return_tensors="pt",
+            texts,
+            padding=True,
+            truncation=True,
+            max_length=settings.ml.max_length,
+            return_tensors="pt",
         ).to(settings.ml.device)
 
         logits = self.model(**inputs).logits
@@ -115,22 +119,26 @@ class SentimentEnsemble:
             latency_ms = (time.perf_counter() - t0) * 1000 / len(texts)
 
             probs_matrix = np.array(
-                [[p.get("positive", 0.0), p.get("negative", 0.0), p.get("neutral", 0.0)]
-                 for p in preds],
+                [
+                    [p.get("positive", 0.0), p.get("negative", 0.0), p.get("neutral", 0.0)]
+                    for p in preds
+                ],
                 dtype=np.float32,
             )
             per_model_probs.append(probs_matrix)
 
             for j, probs in enumerate(probs_matrix):
                 argmax = int(probs.argmax())
-                model_preds_per_text[j].append(ModelPrediction(
-                    model_name=model.name,
-                    sentiment=_IDX_TO_SENTIMENT[argmax],
-                    positive_prob=float(probs[0]),
-                    negative_prob=float(probs[1]),
-                    neutral_prob=float(probs[2]),
-                    latency_ms=latency_ms,
-                ))
+                model_preds_per_text[j].append(
+                    ModelPrediction(
+                        model_name=model.name,
+                        sentiment=_IDX_TO_SENTIMENT[argmax],
+                        positive_prob=float(probs[0]),
+                        negative_prob=float(probs[1]),
+                        neutral_prob=float(probs[2]),
+                        latency_ms=latency_ms,
+                    )
+                )
 
         # Weighted average: (n_models, n_texts, 3) → (n_texts, 3)
         stacked = np.stack(per_model_probs, axis=0)
@@ -149,16 +157,18 @@ class SentimentEnsemble:
             argmax = int(probs.argmax())
             confidence = float(probs[argmax])
             uncertainty = float(mc_uncertainty[i])
-            results.append({
-                "sentiment": _IDX_TO_SENTIMENT[argmax],
-                "confidence": confidence,
-                "uncertainty": uncertainty,
-                "is_uncertain": uncertainty > settings.ml.uncertainty_threshold,
-                "positive_prob": float(probs[0]),
-                "negative_prob": float(probs[1]),
-                "neutral_prob": float(probs[2]),
-                "model_predictions": model_preds_per_text[i],
-            })
+            results.append(
+                {
+                    "sentiment": _IDX_TO_SENTIMENT[argmax],
+                    "confidence": confidence,
+                    "uncertainty": uncertainty,
+                    "is_uncertain": uncertainty > settings.ml.uncertainty_threshold,
+                    "positive_prob": float(probs[0]),
+                    "negative_prob": float(probs[1]),
+                    "neutral_prob": float(probs[2]),
+                    "model_predictions": model_preds_per_text[i],
+                }
+            )
         return results
 
     def calibrate_temperature(
@@ -193,11 +203,15 @@ class SentimentEnsemble:
 
         for _ in range(T):
             preds = primary.predict(texts, enable_dropout=True)
-            mc_samples.append(np.array(
-                [[p.get("positive", 0.0), p.get("negative", 0.0), p.get("neutral", 0.0)]
-                 for p in preds],
-                dtype=np.float32,
-            ))
+            mc_samples.append(
+                np.array(
+                    [
+                        [p.get("positive", 0.0), p.get("negative", 0.0), p.get("neutral", 0.0)]
+                        for p in preds
+                    ],
+                    dtype=np.float32,
+                )
+            )
 
         mean_probs = np.stack(mc_samples, axis=0).mean(axis=0)
         # Normalise entropy to [0,1] by dividing by ln(3)

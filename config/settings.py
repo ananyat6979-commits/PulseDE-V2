@@ -3,6 +3,7 @@
 All secrets come from environment variables or .env.
 Import the singleton: from config.settings import settings
 """
+
 from __future__ import annotations
 
 from typing import Literal

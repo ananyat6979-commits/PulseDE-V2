@@ -3,6 +3,7 @@
 Every module in the pipeline imports types from here.
 This file has zero internal imports — only stdlib.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -38,9 +39,7 @@ class RawArticle:
     content_hash: str = field(init=False)
 
     def __post_init__(self) -> None:
-        self.content_hash = hashlib.sha256(
-            f"{self.headline}{self.url}".encode()
-        ).hexdigest()[:16]
+        self.content_hash = hashlib.sha256(f"{self.headline}{self.url}".encode()).hexdigest()[:16]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -59,7 +58,7 @@ class EntityMention:
     """Named entity extracted from article text."""
 
     text: str
-    entity_type: str   # ORG, PER, TICKER, LOC
+    entity_type: str  # ORG, PER, TICKER, LOC
     confidence: float
     start_char: int
     end_char: int

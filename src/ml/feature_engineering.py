@@ -9,6 +9,7 @@ Extracted per-article:
   is_forward_looking — boolean: FLS regex match
   market_impact    — high / medium / low / unknown (keyword heuristic + ZSC fallback)
 """
+
 from __future__ import annotations
 
 import re
@@ -19,16 +20,51 @@ from transformers import pipeline as hf_pipeline
 from config.settings import settings
 from src.ingestion.schema import EntityMention, MarketImpact
 
-_HEDGE_WORDS = frozenset([
-    "may", "might", "could", "would", "should", "possibly", "potentially",
-    "likely", "unlikely", "uncertain", "expects", "anticipates", "believes",
-    "estimates", "approximately", "about", "around", "roughly", "seems", "appears",
-])
+_HEDGE_WORDS = frozenset(
+    [
+        "may",
+        "might",
+        "could",
+        "would",
+        "should",
+        "possibly",
+        "potentially",
+        "likely",
+        "unlikely",
+        "uncertain",
+        "expects",
+        "anticipates",
+        "believes",
+        "estimates",
+        "approximately",
+        "about",
+        "around",
+        "roughly",
+        "seems",
+        "appears",
+    ]
+)
 
-_NEGATION_WORDS = frozenset([
-    "not", "no", "never", "neither", "nor", "hardly", "barely", "scarcely",
-    "failed", "fails", "miss", "missed", "despite", "however", "but", "without",
-])
+_NEGATION_WORDS = frozenset(
+    [
+        "not",
+        "no",
+        "never",
+        "neither",
+        "nor",
+        "hardly",
+        "barely",
+        "scarcely",
+        "failed",
+        "fails",
+        "miss",
+        "missed",
+        "despite",
+        "however",
+        "but",
+        "without",
+    ]
+)
 
 _FLS_REGEX = re.compile(
     r"\b(will|shall|forecast|guidance|outlook|project(?:s|ed)|plan(?:s|ned)"
@@ -40,35 +76,118 @@ _FLS_REGEX = re.compile(
 _TICKER_RE = re.compile(r"\b([A-Z]{1,5})\b")
 
 _TICKER_TO_SECTOR: dict[str, str] = {
-    "AAPL": "Technology", "MSFT": "Technology", "GOOGL": "Technology",
-    "META": "Technology", "NVDA": "Technology", "AMD": "Technology",
-    "INTC": "Technology", "TSM": "Technology",
-    "JPM": "Financials", "BAC": "Financials", "GS": "Financials",
-    "MS": "Financials", "WFC": "Financials", "V": "Financials", "MA": "Financials",
-    "XOM": "Energy", "CVX": "Energy", "COP": "Energy", "SLB": "Energy",
-    "JNJ": "Healthcare", "UNH": "Healthcare", "PFE": "Healthcare", "ABBV": "Healthcare",
-    "AMZN": "Consumer Discretionary", "TSLA": "Consumer Discretionary", "NKE": "Consumer Discretionary",
-    "WMT": "Consumer Staples", "PG": "Consumer Staples", "KO": "Consumer Staples",
-    "BTC": "Crypto", "ETH": "Crypto",
+    "AAPL": "Technology",
+    "MSFT": "Technology",
+    "GOOGL": "Technology",
+    "META": "Technology",
+    "NVDA": "Technology",
+    "AMD": "Technology",
+    "INTC": "Technology",
+    "TSM": "Technology",
+    "JPM": "Financials",
+    "BAC": "Financials",
+    "GS": "Financials",
+    "MS": "Financials",
+    "WFC": "Financials",
+    "V": "Financials",
+    "MA": "Financials",
+    "XOM": "Energy",
+    "CVX": "Energy",
+    "COP": "Energy",
+    "SLB": "Energy",
+    "JNJ": "Healthcare",
+    "UNH": "Healthcare",
+    "PFE": "Healthcare",
+    "ABBV": "Healthcare",
+    "AMZN": "Consumer Discretionary",
+    "TSLA": "Consumer Discretionary",
+    "NKE": "Consumer Discretionary",
+    "WMT": "Consumer Staples",
+    "PG": "Consumer Staples",
+    "KO": "Consumer Staples",
+    "BTC": "Crypto",
+    "ETH": "Crypto",
 }
 
-_TICKER_BLOCKLIST = frozenset([
-    "I", "A", "AT", "BE", "BY", "FOR", "IT", "IN", "IS", "OR", "ON", "OF",
-    "TO", "US", "ARE", "CEO", "CFO", "IPO", "ETF", "GDP", "FED", "SEC",
-    "FTC", "FDA", "AI", "ML", "CAGR", "YOY", "QOQ", "EPS", "PE", "EV",
-    "EBIT", "EBITDA", "Q1", "Q2", "Q3", "Q4",
-])
+_TICKER_BLOCKLIST = frozenset(
+    [
+        "I",
+        "A",
+        "AT",
+        "BE",
+        "BY",
+        "FOR",
+        "IT",
+        "IN",
+        "IS",
+        "OR",
+        "ON",
+        "OF",
+        "TO",
+        "US",
+        "ARE",
+        "CEO",
+        "CFO",
+        "IPO",
+        "ETF",
+        "GDP",
+        "FED",
+        "SEC",
+        "FTC",
+        "FDA",
+        "AI",
+        "ML",
+        "CAGR",
+        "YOY",
+        "QOQ",
+        "EPS",
+        "PE",
+        "EV",
+        "EBIT",
+        "EBITDA",
+        "Q1",
+        "Q2",
+        "Q3",
+        "Q4",
+    ]
+)
 
 _HIGH_IMPACT_KEYWORDS = [
-    "crash", "collapse", "surge", "plunge", "recession", "fed rate",
-    "bankruptcy", "default", "rate hike", "rate cut", "layoffs", "merger",
-    "acquisition", "earnings beat", "earnings miss", "profit warning",
-    "upgrade", "downgrade", "investigation", "fraud", "scandal", "sanction",
+    "crash",
+    "collapse",
+    "surge",
+    "plunge",
+    "recession",
+    "fed rate",
+    "bankruptcy",
+    "default",
+    "rate hike",
+    "rate cut",
+    "layoffs",
+    "merger",
+    "acquisition",
+    "earnings beat",
+    "earnings miss",
+    "profit warning",
+    "upgrade",
+    "downgrade",
+    "investigation",
+    "fraud",
+    "scandal",
+    "sanction",
 ]
 
 _MED_IMPACT_KEYWORDS = [
-    "report", "quarterly", "revenue", "profit", "loss", "guidance",
-    "analyst", "forecast", "dividend", "buyback",
+    "report",
+    "quarterly",
+    "revenue",
+    "profit",
+    "loss",
+    "guidance",
+    "analyst",
+    "forecast",
+    "dividend",
+    "buyback",
 ]
 
 
@@ -113,8 +232,10 @@ class FinancialFeatureExtractor:
     def _get_ner(self) -> object:
         if self._ner is None:
             self._ner = hf_pipeline(
-                "ner", model=settings.ml.ner_model,
-                aggregation_strategy="simple", device=settings.ml.device,
+                "ner",
+                model=settings.ml.ner_model,
+                aggregation_strategy="simple",
+                device=settings.ml.device,
             )
         return self._ner
 
@@ -134,21 +255,23 @@ class FinancialFeatureExtractor:
             raw = self._get_ner()(text)  # type: ignore[operator]
             return [
                 EntityMention(
-                    text=e["word"], entity_type=e["entity_group"],
+                    text=e["word"],
+                    entity_type=e["entity_group"],
                     confidence=round(float(e["score"]), 4),
-                    start_char=e["start"], end_char=e["end"],
+                    start_char=e["start"],
+                    end_char=e["end"],
                 )
-                for e in raw if e.get("score", 0) > 0.80
+                for e in raw
+                if e.get("score", 0) > 0.80
             ]
         except Exception:
             return []
 
     def _extract_tickers(self, text: str) -> list[str]:
         candidates = _TICKER_RE.findall(text)
-        return list(dict.fromkeys(
-            t for t in candidates
-            if t not in _TICKER_BLOCKLIST and len(t) >= 2
-        ))
+        return list(
+            dict.fromkeys(t for t in candidates if t not in _TICKER_BLOCKLIST and len(t) >= 2)
+        )
 
     def _extract_sectors(self, tickers: list[str]) -> list[str]:
         seen: dict[str, None] = {}
@@ -173,7 +296,11 @@ class FinancialFeatureExtractor:
             zsc = self._get_zsc()
             result = zsc(  # type: ignore[operator]
                 headline,
-                candidate_labels=["high market impact", "medium market impact", "low market impact"],
+                candidate_labels=[
+                    "high market impact",
+                    "medium market impact",
+                    "low market impact",
+                ],
                 hypothesis_template="This news has {} on financial markets.",
             )
             label: str = result["labels"][0]

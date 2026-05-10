@@ -9,13 +9,14 @@ This means dedup works correctly within a single run but does not persist
 across restarts. Behaviour is logged clearly so the operator knows which
 mode is active.
 """
+
 from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Iterator
+from datetime import UTC, datetime
 
 import feedparser
 import httpx
@@ -28,7 +29,7 @@ from src.ingestion.schema import RawArticle
 logger = logging.getLogger(__name__)
 
 _SIMHASH_NS = "pulsede:simhash:"
-_HASH_NS    = "pulsede:hash:"
+_HASH_NS = "pulsede:hash:"
 
 
 @dataclass
@@ -65,8 +66,8 @@ class NewsFetcher:
 
         # ── Redis connection (optional) ────────────────────────────────────────
         self._redis: redis_lib.Redis | None = None
-        self._seen_hashes: set[str] = set()       # fallback exact dedup
-        self._seen_simhashes: list[int] = []       # fallback near-dedup
+        self._seen_hashes: set[str] = set()  # fallback exact dedup
+        self._seen_simhashes: list[int] = []  # fallback near-dedup
 
         try:
             r = redis_lib.Redis(
@@ -74,11 +75,10 @@ class NewsFetcher:
                 port=settings.redis.port,
                 db=settings.redis.db,
                 password=(
-                    settings.redis.password.get_secret_value()
-                    if settings.redis.password else None
+                    settings.redis.password.get_secret_value() if settings.redis.password else None
                 ),
                 decode_responses=True,
-                socket_connect_timeout=2,   # fail fast — don't block startup
+                socket_connect_timeout=2,  # fail fast — don't block startup
                 socket_timeout=2,
             )
             r.ping()
@@ -109,7 +109,10 @@ class NewsFetcher:
         for stat in self._stats:
             logger.info(
                 "fetch_stats source=%s fetched=%d deduped=%d yield=%.1f%%",
-                stat.source, stat.fetched, stat.deduplicated, stat.yield_rate * 100,
+                stat.source,
+                stat.fetched,
+                stat.deduplicated,
+                stat.yield_rate * 100,
             )
         return unique[: settings.news.max_articles_per_fetch]
 
@@ -127,8 +130,10 @@ class NewsFetcher:
                 resp = self._http.get(
                     "https://newsapi.org/v2/everything",
                     params={
-                        "q": query, "language": "en",
-                        "sortBy": "publishedAt", "pageSize": 20,
+                        "q": query,
+                        "language": "en",
+                        "sortBy": "publishedAt",
+                        "pageSize": 20,
                         "apiKey": api_key,
                     },
                 )
@@ -136,16 +141,18 @@ class NewsFetcher:
                 for item in resp.json().get("articles", []):
                     if not item.get("title") or item["title"] == "[Removed]":
                         continue
-                    articles.append(RawArticle(
-                        source=f"newsapi:{item.get('source', {}).get('name', 'unknown')}",
-                        headline=item["title"].strip(),
-                        url=item.get("url", ""),
-                        published_at=datetime.fromisoformat(
-                            item["publishedAt"].replace("Z", "+00:00")
-                        ),
-                        body=item.get("content") or item.get("description") or "",
-                        author=item.get("author") or "",
-                    ))
+                    articles.append(
+                        RawArticle(
+                            source=f"newsapi:{item.get('source', {}).get('name', 'unknown')}",
+                            headline=item["title"].strip(),
+                            url=item.get("url", ""),
+                            published_at=datetime.fromisoformat(
+                                item["publishedAt"].replace("Z", "+00:00")
+                            ),
+                            body=item.get("content") or item.get("description") or "",
+                            author=item.get("author") or "",
+                        )
+                    )
                     stat.fetched += 1
             except httpx.HTTPError as exc:
                 logger.warning("newsapi_error query=%s err=%s", query, exc)
@@ -164,21 +171,20 @@ class NewsFetcher:
                 source_name = feed.feed.get("title", feed_url)
                 for entry in feed.entries[:20]:
                     pub = entry.get("published_parsed") or entry.get("updated_parsed")
-                    published_at = (
-                        datetime(*pub[:6], tzinfo=timezone.utc)
-                        if pub else datetime.now(timezone.utc)
-                    )
+                    published_at = datetime(*pub[:6], tzinfo=UTC) if pub else datetime.now(UTC)
                     headline = (entry.get("title") or "").strip()
                     if not headline:
                         continue
-                    articles.append(RawArticle(
-                        source=f"rss:{source_name}",
-                        headline=headline,
-                        url=entry.get("link") or "",
-                        published_at=published_at,
-                        body=entry.get("summary") or "",
-                        author=entry.get("author") or "",
-                    ))
+                    articles.append(
+                        RawArticle(
+                            source=f"rss:{source_name}",
+                            headline=headline,
+                            url=entry.get("link") or "",
+                            published_at=published_at,
+                            body=entry.get("summary") or "",
+                            author=entry.get("author") or "",
+                        )
+                    )
                     stat.fetched += 1
             except Exception as exc:
                 logger.warning("rss_error feed=%s err=%s", feed_url, exc)
@@ -203,21 +209,21 @@ class NewsFetcher:
             for item in resp.json().get("feed", []):
                 pub_str = item.get("time_published", "")
                 try:
-                    published_at = datetime.strptime(pub_str, "%Y%m%dT%H%M%S").replace(
-                        tzinfo=timezone.utc
-                    )
+                    published_at = datetime.strptime(pub_str, "%Y%m%dT%H%M%S").replace(tzinfo=UTC)
                 except ValueError:
-                    published_at = datetime.now(timezone.utc)
+                    published_at = datetime.now(UTC)
                 headline = (item.get("title") or "").strip()
                 if headline:
-                    articles.append(RawArticle(
-                        source=f"av:{item.get('source', 'unknown')}",
-                        headline=headline,
-                        url=item.get("url") or "",
-                        published_at=published_at,
-                        body=item.get("summary") or "",
-                        author=(item.get("authors") or [None])[0] or "",
-                    ))
+                    articles.append(
+                        RawArticle(
+                            source=f"av:{item.get('source', 'unknown')}",
+                            headline=headline,
+                            url=item.get("url") or "",
+                            published_at=published_at,
+                            body=item.get("summary") or "",
+                            author=(item.get("authors") or [None])[0] or "",
+                        )
+                    )
                     stat.fetched += 1
         except Exception as exc:
             logger.warning("av_error err=%s", exc)
@@ -279,7 +285,7 @@ class NewsFetcher:
         if self._redis:
             self._redis.close()
 
-    def __enter__(self) -> "NewsFetcher":
+    def __enter__(self) -> NewsFetcher:
         return self
 
     def __exit__(self, *_: object) -> None:

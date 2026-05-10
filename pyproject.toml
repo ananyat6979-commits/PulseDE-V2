@@ -73,8 +73,27 @@ notebooks = [
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "PT"]
-ignore = ["E501"]
+ignore = [
+    # FastAPI intentionally uses Depends() in function signatures — not a bug
+    "B008",
+    # zip() strict= is noise for internal code; not a safety issue here
+    "B905",
+    # T is standard mathematical notation for temperature in ML papers
+    "N806",
+    # torch.nn.functional as F is universal PyTorch convention
+    "N812",
+    # StrEnum changes MRO behaviour — keep str+Enum for compatibility
+    "UP042",
+    # raise from err — minor style, not a correctness issue
+    "B904",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test files: allow private member access and some style flexibility
+"tests/*" = ["S101", "ANN"]
 
 [tool.mypy]
 python_version = "3.11"

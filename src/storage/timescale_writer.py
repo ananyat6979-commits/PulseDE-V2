@@ -11,11 +11,13 @@ Schema:
   sentiment_results  — hypertable, chunked daily by published_at
   sentiment_hourly   — continuous aggregate (materialised view, refreshed automatically)
 """
+
 from __future__ import annotations
 
 import logging
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Generator
+from typing import Any
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker

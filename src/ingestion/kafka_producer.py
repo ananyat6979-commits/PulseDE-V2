@@ -4,6 +4,7 @@ Design: acks=all + enable.idempotence prevents duplicates within the broker.
         Tenacity handles transient errors with exponential backoff.
         Dead-letter queue receives messages that exhaust all retries.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,7 +24,9 @@ PRODUCE_TOTAL = Counter(
     "pulsede_kafka_produce_total", "Kafka produce attempts", ["topic", "status"]
 )
 PRODUCE_LATENCY = Histogram(
-    "pulsede_kafka_produce_latency_seconds", "Kafka produce latency", ["topic"],
+    "pulsede_kafka_produce_latency_seconds",
+    "Kafka produce latency",
+    ["topic"],
     buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0],
 )
 
@@ -94,13 +97,17 @@ class ArticleProducer:
         if err:
             logger.warning("delivery_failed err=%s topic=%s", err, msg.topic())
         else:
-            logger.debug("delivery_ok topic=%s partition=%d offset=%d",
-                         msg.topic(), msg.partition(), msg.offset())
+            logger.debug(
+                "delivery_ok topic=%s partition=%d offset=%d",
+                msg.topic(),
+                msg.partition(),
+                msg.offset(),
+            )
 
     def close(self) -> None:
         self._producer.flush(timeout=30)
 
-    def __enter__(self) -> "ArticleProducer":
+    def __enter__(self) -> ArticleProducer:
         return self
 
     def __exit__(self, *_: object) -> None:

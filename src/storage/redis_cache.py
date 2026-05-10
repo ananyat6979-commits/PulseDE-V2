@@ -6,6 +6,7 @@ Responsibilities:
   Pub/Sub channel for WebSocket real-time push
   Sliding-window rate limiter for the FastAPI layer
 """
+
 from __future__ import annotations
 
 import json
@@ -33,8 +34,7 @@ class RedisCache:
             port=settings.redis.port,
             db=settings.redis.db,
             password=(
-                settings.redis.password.get_secret_value()
-                if settings.redis.password else None
+                settings.redis.password.get_secret_value() if settings.redis.password else None
             ),
             decode_responses=True,
             socket_connect_timeout=5,
@@ -86,14 +86,17 @@ class RedisCache:
             pos = sum(1 for r in items if r.ensemble_sentiment.value == "positive")
             neg = sum(1 for r in items if r.ensemble_sentiment.value == "negative")
             existing = int(self._r.hget(key, "article_count") or 0)
-            pipe.hset(key, mapping={
-                "positive_pct": round(pos / n, 4),
-                "negative_pct": round(neg / n, 4),
-                "neutral_pct": round((n - pos - neg) / n, 4),
-                "article_count": existing + n,
-                "avg_confidence": round(sum(r.ensemble_confidence for r in items) / n, 4),
-                "avg_uncertainty": round(sum(r.ensemble_uncertainty for r in items) / n, 4),
-            })
+            pipe.hset(
+                key,
+                mapping={
+                    "positive_pct": round(pos / n, 4),
+                    "negative_pct": round(neg / n, 4),
+                    "neutral_pct": round((n - pos - neg) / n, 4),
+                    "article_count": existing + n,
+                    "avg_confidence": round(sum(r.ensemble_confidence for r in items) / n, 4),
+                    "avg_uncertainty": round(sum(r.ensemble_uncertainty for r in items) / n, 4),
+                },
+            )
             pipe.expire(key, 300)
         pipe.execute()
 

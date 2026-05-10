@@ -6,17 +6,18 @@ Batching:   polls up to batch_size=16 messages before running inference.
 Shutdown:   SIGTERM/SIGINT → graceful drain → close consumer.
 Metrics:    Prometheus counters + E2E latency histogram.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import signal
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from confluent_kafka import Consumer, KafkaError, KafkaException, Message
-from prometheus_client import Counter, Gauge, Histogram
+from confluent_kafka import Consumer, KafkaError, Message
+from prometheus_client import Counter, Histogram
 
 from config.settings import settings
 from src.ingestion.schema import RawArticle, SentimentResult
@@ -30,7 +31,8 @@ logger = logging.getLogger(__name__)
 CONSUMED = Counter("pulsede_consumer_messages_total", "Messages consumed", ["status"])
 PROCESSED = Counter("pulsede_processed_articles_total", "Articles successfully processed")
 E2E_LATENCY = Histogram(
-    "pulsede_e2e_latency_seconds", "End-to-end latency kafka→DB",
+    "pulsede_e2e_latency_seconds",
+    "End-to-end latency kafka→DB",
     buckets=[0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0],
 )
 
@@ -59,7 +61,7 @@ class SentimentConsumer:
             "bootstrap.servers": settings.kafka.bootstrap_servers,
             "group.id": settings.kafka.consumer_group,
             "auto.offset.reset": "earliest",
-            "enable.auto.commit": False,   # manual commit for at-least-once
+            "enable.auto.commit": False,  # manual commit for at-least-once
             "max.poll.interval.ms": 300_000,
             "session.timeout.ms": 30_000,
         }
@@ -117,29 +119,31 @@ class SentimentConsumer:
 
         results: list[SentimentResult] = []
         for article, fv, eo in zip(articles, feature_vectors, ensemble_outputs):
-            results.append(SentimentResult(
-                article_hash=article.content_hash,
-                headline=article.headline,
-                url=article.url,
-                source=article.source,
-                published_at=article.published_at,
-                processed_at=datetime.now(timezone.utc),
-                ensemble_sentiment=eo["sentiment"],
-                ensemble_confidence=eo["confidence"],
-                ensemble_uncertainty=eo["uncertainty"],
-                positive_prob=eo["positive_prob"],
-                negative_prob=eo["negative_prob"],
-                neutral_prob=eo["neutral_prob"],
-                model_predictions=eo["model_predictions"],
-                entities=fv.entities,
-                tickers=fv.tickers,
-                sectors=fv.sectors,
-                is_forward_looking=fv.is_forward_looking,
-                has_negation=fv.has_negation,
-                hedge_score=fv.hedge_score,
-                market_impact=fv.market_impact,
-                is_uncertain=eo["is_uncertain"],
-            ))
+            results.append(
+                SentimentResult(
+                    article_hash=article.content_hash,
+                    headline=article.headline,
+                    url=article.url,
+                    source=article.source,
+                    published_at=article.published_at,
+                    processed_at=datetime.now(UTC),
+                    ensemble_sentiment=eo["sentiment"],
+                    ensemble_confidence=eo["confidence"],
+                    ensemble_uncertainty=eo["uncertainty"],
+                    positive_prob=eo["positive_prob"],
+                    negative_prob=eo["negative_prob"],
+                    neutral_prob=eo["neutral_prob"],
+                    model_predictions=eo["model_predictions"],
+                    entities=fv.entities,
+                    tickers=fv.tickers,
+                    sectors=fv.sectors,
+                    is_forward_looking=fv.is_forward_looking,
+                    has_negation=fv.has_negation,
+                    hedge_score=fv.hedge_score,
+                    market_impact=fv.market_impact,
+                    is_uncertain=eo["is_uncertain"],
+                )
+            )
 
         try:
             self._db.write_batch(results)
@@ -147,13 +151,17 @@ class SentimentConsumer:
             PROCESSED.inc(len(results))
         except Exception as exc:
             logger.error("db_write_failed %s — will not commit offsets", exc)
-            return   # retry on next consumer restart
+            return  # retry on next consumer restart
 
         for msg in msgs:
             self._consumer.commit(message=msg, asynchronous=False)
 
-        logger.info("batch_done count=%d elapsed=%.2fs arts/s=%.1f",
-                    len(results), elapsed, len(results) / elapsed)
+        logger.info(
+            "batch_done count=%d elapsed=%.2fs arts/s=%.1f",
+            len(results),
+            elapsed,
+            len(results) / elapsed,
+        )
 
     @staticmethod
     def _deserialise(p: dict[str, Any]) -> RawArticle:

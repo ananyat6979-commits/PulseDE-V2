@@ -56,3 +56,7 @@ pulsede_lite.db
 mlflow_lite.db
 
 *.db
+
+.mypy_cache/
+
+*.mypy_cache

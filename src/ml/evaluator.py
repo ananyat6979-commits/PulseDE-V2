@@ -15,13 +15,13 @@ Metrics:
 
 All results are MLflow-ready: log_to_mlflow() serialises everything.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 import mlflow
 import numpy as np
@@ -111,9 +111,7 @@ def evaluate(
     mcc = float(matthews_corrcoef(y_true, y_pred))
     kappa = float(cohen_kappa_score(y_true, y_pred))
     accuracy = float((y_true == y_pred).mean())
-    macro_roc_auc = float(
-        roc_auc_score(y_true, y_proba, multi_class="ovr", average="macro")
-    )
+    macro_roc_auc = float(roc_auc_score(y_true, y_proba, multi_class="ovr", average="macro"))
 
     per_class: dict[str, PerClassMetrics] = {}
     for i, cls_name in enumerate(CLASS_NAMES):
@@ -129,9 +127,9 @@ def evaluate(
         )
 
     ece = _ece(y_true, y_proba)
-    brier = float(np.mean([
-        brier_score_loss((y_true == i).astype(int), y_proba[:, i]) for i in range(3)
-    ]))
+    brier = float(
+        np.mean([brier_score_loss((y_true == i).astype(int), y_proba[:, i]) for i in range(3)])
+    )
     frac_pos, mean_pred = calibration_curve((y_true == 0).astype(int), y_proba[:, 0], n_bins=10)
     reliability = [
         {"mean_predicted_prob": float(mp), "fraction_positive": float(fp)}
@@ -154,7 +152,8 @@ def evaluate(
         accuracy=round(accuracy, 6),
         per_class=per_class,
         calibration=CalibrationMetrics(
-            ece=round(ece, 6), brier_score=round(brier, 6),
+            ece=round(ece, 6),
+            brier_score=round(brier, 6),
             reliability_diagram=reliability,
         ),
         confusion_matrix=cm.tolist(),
@@ -165,10 +164,7 @@ def evaluate(
         p95_ms=round(float(np.percentile(latencies_ms, 95)), 2),
         p99_ms=round(float(np.percentile(latencies_ms, 99)), 2),
         n_samples=n,
-        class_distribution={
-            cls: float((y_true == i).mean())
-            for i, cls in enumerate(CLASS_NAMES)
-        },
+        class_distribution={cls: float((y_true == i).mean()) for i, cls in enumerate(CLASS_NAMES)},
         model_names=model_names or [],
     )
 
@@ -177,11 +173,16 @@ def log_to_mlflow(report: EvaluationReport, run_id: str | None = None) -> None:
     with mlflow.start_run(run_id=run_id, nested=True):
         mlflow.log_metrics(_flatten(report))
         cm_path = Path("/tmp/confusion_matrix.json")
-        cm_path.write_text(json.dumps({
-            "raw": report.confusion_matrix,
-            "normalised": report.confusion_matrix_normalised,
-            "class_names": CLASS_NAMES,
-        }, indent=2))
+        cm_path.write_text(
+            json.dumps(
+                {
+                    "raw": report.confusion_matrix,
+                    "normalised": report.confusion_matrix_normalised,
+                    "class_names": CLASS_NAMES,
+                },
+                indent=2,
+            )
+        )
         mlflow.log_artifact(str(cm_path), artifact_path="evaluation")
     logger.info("mlflow_eval_logged n=%d macro_f1=%.4f", report.n_samples, report.macro_f1)
 
