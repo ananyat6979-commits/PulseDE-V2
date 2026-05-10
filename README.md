@@ -56,7 +56,7 @@ PulseDE/
 │   └── integration/                  # Scaffold for DB/Redis/Kafka integration tests
 ├── Dockerfile                        # Multi-stage: base → api / consumer / dashboard
 ├── pyproject.toml                    # deps · ruff · mypy · pytest config (replaces 4 files)
-├── .env.example                      # All env vars documented — copy to .env
+├── .env.example                      # All env vars documented, copy to .env
 └── .gitignore                        # Blocks .env, __pycache__, *.pt, mlruns/
 ```
 
@@ -256,12 +256,12 @@ The ML ensemble architecture, evaluation metrics, feature engineering logic, dri
 
 ## Benchmark results
 
-> Measured on CPU (Windows, no GPU) — see [BENCHMARKS.md](BENCHMARKS.md) for full details.
+> Measured on CPU (Windows, no GPU): see [BENCHMARKS.md](BENCHMARKS.md) for full details.
 
 | Metric | Value | Notes |
 |---|---|---|
 | Accuracy | **86.7%** | 15-article batch, simulated ground truth |
-| Negative class F1 | **0.909** | 100% recall — critical for risk systems |
+| Negative class F1 | **0.909** | 100% recall: critical for risk systems |
 | Positive class F1 | **0.889** | |
 | MCC | **0.744** | balanced metric, robust to class imbalance |
 | Brier Score | **0.099** | probabilistic output quality |
@@ -272,7 +272,7 @@ The ML ensemble architecture, evaluation metrics, feature engineering logic, dri
 | MC Dropout passes | **T=10** | production; T=3 for CPU lite mode |
 | Uncertainty threshold | **0.15** | production; 0.55 for CPU lite mode |
 
-**Notable:** Negative class recall = **1.000** on this batch — the ensemble
+**Notable:** Negative class recall = **1.000** on this batch; the ensemble
 correctly identified every negative article. In financial risk applications
 this is the most commercially important result: a missed negative signal
 costs more than a false alarm.
