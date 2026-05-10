@@ -1,4 +1,4 @@
-# PulseDE v2.0 — Benchmark Results & Observed Metrics
+# PulseDE v2.0: Benchmark Results & Observed Metrics
 
 > Recorded from live runs on 8 May 2026.
 > Hardware: Windows laptop, CPU-only (no GPU), Python 3.11.
@@ -65,7 +65,7 @@ Models cached at: `C:\Users\<user>\.cache\huggingface\hub\`
 | Metric | Value | Threshold / target |
 |---|---|---|
 | **Accuracy** | **0.8667** | > 0.80 |
-| **Macro F1** | **0.5993** | > 0.75 (dragged down by neutral class — see note) |
+| **Macro F1** | **0.5993** | > 0.75 (dragged down by neutral class, see note) |
 | **Weighted F1** | — | to be measured on larger dataset |
 | **MCC** | **0.7441** | > 0.60 = good |
 | **ECE (calibration)** | **0.1943** | < 0.05 = well calibrated |
@@ -93,7 +93,7 @@ This is a data distribution issue, not a model issue.
 
 > Negative class recall = 1.000: the ensemble correctly identified
 > every negative article in this batch. This is the most commercially
-> valuable class for risk systems — a false negative (missing bad news)
+> valuable class for risk systems: a false negative (missing bad news)
 > is more costly than a false positive.
 
 ---
@@ -103,12 +103,12 @@ This is a data distribution issue, not a model issue.
 | Metric | Value | Notes |
 |---|---|---|
 | Avg ensemble confidence | **0.8972** | across 15 articles |
-| Avg MC Dropout uncertainty | **0.5236** | T=10, CPU — artificially high |
+| Avg MC Dropout uncertainty | **0.5236** | T=10, CPU: artificially high |
 | Avg MC Dropout uncertainty (T=3) | to be re-measured | |
 | Uncertain flags (T=10, threshold=0.15) | **15/15 = 100%** | threshold too low for CPU |
 | Uncertain flags (T=3, threshold=0.55) | to be re-measured | expected ~10-20% |
 
-> High uncertainty at T=10 on CPU is expected — CPU dropout variance
+> High uncertainty at T=10 on CPU is expected: CPU dropout variance
 > is higher than GPU due to different numerical precision and
 > stochastic execution order. The threshold must be recalibrated
 > per hardware configuration. T=3 with threshold=0.55 is the
@@ -123,12 +123,12 @@ This is a data distribution issue, not a model issue.
 | neutral | 0 | 0% | — |
 
 > Note: 0% neutral on a demo batch of financial headlines is realistic.
-> Financial news is rarely neutral — writers frame stories as
+> Financial news is rarely neutral: writers frame stories as
 > positive or negative by nature.
 
 ---
 
-## Drift detection (15 articles — split-half test)
+## Drift detection (15 articles: split-half test)
 
 > ⚠️ 15 articles is below the minimum recommended sample for drift.
 > These numbers will be meaningful at 200+ articles.
@@ -158,7 +158,7 @@ This is a data distribution issue, not a model issue.
 | S&P 500 hits record high as economic data shows resilience | positive | 0.911 | 0.618 |
 
 > Notable: "Fed may possibly cut rates" → predicted NEGATIVE (0.724 confidence).
-> This is debatable — rate cuts are generally market-positive.
+> This is debatable: rate cuts are generally market-positive.
 > High uncertainty (0.590) correctly flags this as ambiguous.
 > This is the MC Dropout uncertainty working as intended.
 
@@ -168,26 +168,26 @@ This is a data distribution issue, not a model issue.
 
 These are the gaps between current numbers and publishable numbers:
 
-1. **Run against Financial PhraseBank** (Malo et al., 2014) — the standard
+1. **Run against Financial PhraseBank** (Malo et al., 2014): the standard
    benchmark for financial sentiment. FinBERT (ProsusAI) reports 0.879 F1
    on this dataset. Our ensemble should beat that.
 
-2. **GPU inference throughput** — expected 10-20x improvement over CPU numbers.
+2. **GPU inference throughput**: expected 10-20x improvement over CPU numbers.
    Target: > 5 articles/sec at T=10.
 
-3. **Temperature calibration** — run `ensemble.calibrate_temperature()` on a
+3. **Temperature calibration**: run `ensemble.calibrate_temperature()` on a
    held-out set and measure ECE before/after. Target: ECE < 0.05.
 
-4. **Uncertainty threshold calibration** — learn the optimal threshold per
+4. **Uncertainty threshold calibration**: learn the optimal threshold per
    hardware (GPU vs CPU) using precision-recall curve on uncertainty scores.
 
-5. **Neutral class performance** — test on a balanced dataset with neutral
+5. **Neutral class performance**: test on a balanced dataset with neutral
    examples. Financial PhraseBank is ~25% neutral.
 
-6. **Drift detection at scale** — need 500+ articles across two time windows
+6. **Drift detection at scale**: need 500+ articles across two time windows
    to get meaningful PSI and JS divergence numbers.
 
-7. **E2E latency with full stack** — Kafka consume → ML → TimescaleDB write.
+7. **E2E latency with full stack**: Kafka consume → ML → TimescaleDB write.
    Target: p95 < 5s per article in production.
 
 ---
@@ -221,7 +221,7 @@ Brier Score:       0.099         →  0.093
 Uncertain flags:   15/15         →  5/15   (threshold=0.55)
 Avg uncertainty:   0.524         →  0.477
 
-## Drift detection (30 articles — split-half test)
+## Drift detection (30 articles: split-half test)
 
 | Metric | Value | Threshold | Status |
 |---|---|---|---|
@@ -239,7 +239,7 @@ genuinely shifts over time (e.g. market regime change).
 | Articles per second | **0.3–1.8 arts/sec** | CPU, T=5 MC Dropout, 3 models |
 | Speed variance cause | CPU thermal throttling | Not fixable without GPU |
 
-## Classification metrics — final (45 articles, 3 runs)
+## Classification metrics: final (45 articles, 3 runs)
 
 > Ground truth uses known labels from demo headlines + 15% random noise
 > to simulate real-world annotation disagreement.
@@ -254,7 +254,7 @@ genuinely shifts over time (e.g. market regime change).
 | **Brier Score** | **0.1222** | marginal; improves with calibration |
 | p50 / p95 / p99 | **124ms / 193ms / 195ms** | CPU, T=5 |
 
-## Per-class metrics — final (45 articles)
+## Per-class metrics: final (45 articles)
 
 | Class | P | R | F1 | PR-AUC | ROC-AUC | n |
 |---|---|---|---|---|---|---|
@@ -262,7 +262,7 @@ genuinely shifts over time (e.g. market regime change).
 | **negative** | **0.889** | 0.842 | **0.865** | **0.908** | **0.901** | 19 |
 | neutral | 0.000 | 0.000 | 0.000 | 0.211 | 0.526 | 6 |
 
-## Drift detection — final (45 articles, split-half)
+## Drift detection: final (45 articles, split-half)
 
 | Metric | Value | Status |
 |---|---|---|
@@ -271,7 +271,7 @@ genuinely shifts over time (e.g. market regime change).
 | Chi² p-value | **0.9928** | ✓ no drift (> 0.01) |
 | Overall | — | **✓ No drift detected** |
 
-## Uncertainty — final
+## Uncertainty: final
 
 | Metric | Value |
 |---|---|
