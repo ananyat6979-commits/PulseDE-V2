@@ -68,7 +68,7 @@ PulseDE/
 |---|---|---|
 | `ProsusAI/finbert` | **50%** | Fine-tuned on 10K+ financial news + SEC filings. Best single-model F1 on Financial PhraseBank (Malo et al., 2014). |
 | `yiyanghkust/finbert-tone` | **30%** | Fine-tuned on analyst tone data. Captures bullish/bearish language that the primary model misses. |
-| `mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis` | **20%** | 40% smaller, faster, higher pairwise disagreement — increases ensemble diversity and reduces variance. |
+| `mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis` | **20%** | 40% smaller, faster, higher pairwise disagreement which increases ensemble diversity and reduces variance. |
 
 **Why ensemble over single model**: Deep Ensembles (Lakshminarayanan et al., NeurIPS 2017) consistently reduce variance by 20–30% and produce better-calibrated probability estimates than any single model. The weighted average over soft probabilities preserves calibration; majority vote over hard labels discards probability information.
 
